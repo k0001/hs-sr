@@ -1,0 +1,59 @@
+cabal-version: 2.4
+name: sr
+version: 0.1.0
+license: BSD-3-Clause
+license-file: LICENSE
+extra-source-files: README.md CHANGELOG.md
+author: Renzo Carbonara
+maintainer: renλren.zone
+copyright: Renzo Carbonara, 2023
+category: Numbers
+build-type: Simple
+synopsis: Numbers safely representable as both Scientific and Rational
+description: Numbers safely representable as both Scientific and Rational
+homepage: https://gitlab.com/k0001/hs-sr
+bug-reports: https://gitlab.com/k0001/hs-sr/issues
+tested-with: GHC == 9.6.1
+
+common basic
+  default-language: GHC2021
+  ghc-options: -O2 -Wall
+  build-depends:
+    aeson,
+    base == 4.*,
+    binary,
+    hedgehog,
+    scientific,
+  default-extensions:
+    BlockArguments
+    DataKinds
+    DerivingStrategies
+    LambdaCase
+    OverloadedRecordDot
+    OverloadedStrings
+
+library
+  import: basic
+  hs-source-dirs: lib
+  exposed-modules:
+    SR
+    SR.Test
+  build-depends:
+    deepseq,
+    hashable,
+    integer-logarithms,
+    kind-rational,
+    leb128-binary,
+
+test-suite test
+  import: basic
+  default-language: GHC2021
+  ghc-options: -O2 -threaded
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  build-depends:
+    sr,
+    tasty,
+    tasty-hedgehog,
+
