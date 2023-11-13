@@ -31,7 +31,7 @@ module SR
    , toFixed
    , KR.Round (..)
 
-    -- ** Extras
+    -- * Extras
    , binaryPutScientific
    , binaryGetScientific
    ) where
