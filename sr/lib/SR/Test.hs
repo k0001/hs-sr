@@ -9,11 +9,11 @@ module SR.Test
    , hprop_SR_Aeson_roundtrip
    , hprop_SR_Binary_roundtrip
    , hprop_SR_f
+   , hprop_SR_i
    , hprop_SR_ops1
    , hprop_SR_ops2
    , hprop_SR_r
    , hprop_SR_s
-   , hprop_SR_i
    ) where
 
 import Data.Aeson qualified as Ae
@@ -93,6 +93,7 @@ hprop_SR_Aeson_roundtrip :: H.Property
 hprop_SR_Aeson_roundtrip = H.property do
    a <- H.forAll hgen_SR_Default
    H.tripping a Ae.encode Ae.decode
+   H.tripping a (Ae.encode . show) Ae.decode
 
 hprop_SR_s :: H.Property
 hprop_SR_s = H.property do

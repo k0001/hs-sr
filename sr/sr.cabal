@@ -39,11 +39,12 @@ library
     SR
     SR.Test
   build-depends:
+    attoparsec,
     deepseq,
     hashable,
     integer-logarithms,
     kind-rational,
-    leb128-binary,
+    leb128-binary >= 0.1.3,
 
 test-suite test
   import: basic

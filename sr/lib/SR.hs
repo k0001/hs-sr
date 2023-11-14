@@ -30,20 +30,15 @@ module SR
    , toInteger
    , toFixed
    , KR.Round (..)
-
-    -- * Extras
-   , binaryPutScientific
-   , binaryGetScientific
    ) where
 
 import Control.DeepSeq (NFData (..))
 import Data.Aeson qualified as Ae
 import Data.Aeson.Types qualified as Ae
+import Data.Attoparsec.Text qualified as AT
 import Data.Binary qualified as Bin
 import Data.Binary.Get qualified as Bin
 import Data.Binary.SLEB128 qualified as SLEB128
-import Data.Binary.ULEB128 qualified as ULEB128
-import Data.Bits
 import Data.Fixed
 import Data.Hashable
 import Data.Proxy
@@ -54,7 +49,6 @@ import GHC.Records (HasField (..))
 import GHC.Stack (HasCallStack)
 import KindRational qualified as KR
 import Math.NumberTheory.Logarithms (integerLog10)
-import Numeric.Natural (Natural)
 import Text.Read (readPrec)
 import Prelude hiding (div, fromRational, recip, toInteger)
 import Prelude qualified as P
@@ -377,57 +371,28 @@ instance Ae.ToJSON SR where
    toJSON = Ae.toJSON . toScientific
    {-# INLINE toJSON #-}
 
+-- | Can decode a 'Ae.Number' or a 'Ae.String' containing an 'AT.scientific'.
 instance Ae.FromJSON SR where
    parseJSON v = Ae.prependFailure "SR: " do
-      fromScientific =<< Ae.parseJSON v
+      case v of
+         Ae.Number s -> fromScientific s
+         Ae.String t ->
+            case AT.parseOnly (AT.scientific <* AT.endOfInput) t of
+               Right s -> fromScientific s
+               Left e -> fail e
+         _ -> fail "Expected number or text"
 
 -- | Very compact representation using 'Data.Binary.ULEB128' and
 -- 'Data.Binary.SLEB128' codecs. @0@ is represented with a single
 -- byte. Other numbers take at least two bytes.
 --
--- Additional compatible encoders: 'binaryPutScientific'.
+-- Additional compatible encoders:
+-- "Data.Binary.SLEB128".'SLEB128.putScientific'.
 --
--- Additional compatible decoders: 'binaryGetScientific'.
+-- Additional compatible decoders:
+-- "Data.Binary.SLEB128".'SLEB128.getScientific'.
 instance Bin.Binary SR where
-   put = binaryPutScientific . toScientific
+   put = SLEB128.putScientific . toScientific
    {-# NOINLINE put #-}
-   get = Bin.label "SR" $ fromScientific =<< binaryGetScientific
+   get = Bin.label "SR" $ fromScientific =<< SLEB128.getScientific 1000
    {-# NOINLINE get #-}
-
--- | Same compact 'Bin.Binary' encoder as the one used by 'SR'.
---
--- Compatible decoders: 'binaryGetScientific' and @'Bin.get' \@'SR'@.
-binaryPutScientific :: S.Scientific -> Bin.Put
-binaryPutScientific = \a ->
-   if S.coefficient a /= 0
-      then do
-         -- The exponent is usually smaller than the coefficient, so we store
-         -- the coefficient sing bit alongside the exponent to increase the
-         -- chances that the coefficient fits in one less byte.
-         let b = S.normalize a
-             c = fromInteger $ abs $ S.coefficient b :: Natural
-             e0 = P.toInteger (S.base10Exponent b :: Int) `unsafeShiftL` 1
-             e1 = if b > 0 then e0 else setBit e0 0 :: Integer
-         ULEB128.putNatural c
-         SLEB128.putInteger e1
-      else Bin.putWord8 0
-{-# INLINABLE binaryPutScientific #-}
-
--- | Same compact 'Bin.Binary' decoder as the one used by 'SR', but without
--- the additional checks introduced by 'SR', so that it can be used with
--- standalone 'Scientific's.
---
--- Compatible encoders: 'binaryPutScientific' and @'Bin.put' \@'SR'@.
-binaryGetScientific :: Bin.Get Scientific
-binaryGetScientific = do
-   c <- ULEB128.getInteger 200
-   if c /= 0
-      then do
-         e1 <- SLEB128.getInteger 10 -- Valid e1 can't be longer than 10.
-         case toIntegralSized (e1 `unsafeShiftR` 1) of
-            Just (e0 :: Int)
-               | testBit e1 0 -> pure $ S.scientific (negate c) e0
-               | otherwise -> pure $ S.scientific c e0
-            Nothing -> fail "Exponent too large"
-      else pure 0
-{-# INLINABLE binaryGetScientific #-}

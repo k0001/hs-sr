@@ -1,14 +1,14 @@
-{ mkDerivation, aeson, base, binary, deepseq, hashable, hedgehog
-, integer-logarithms, kind-rational, leb128-binary, lib, scientific
-, tasty, tasty-hedgehog
+{ mkDerivation, aeson, attoparsec, base, binary, deepseq, hashable
+, hedgehog, integer-logarithms, kind-rational, leb128-binary, lib
+, scientific, tasty, tasty-hedgehog
 }:
 mkDerivation {
   pname = "sr";
   version = "0.1.0";
   src = ./.;
   libraryHaskellDepends = [
-    aeson base binary deepseq hashable hedgehog integer-logarithms
-    kind-rational leb128-binary scientific
+    aeson attoparsec base binary deepseq hashable hedgehog
+    integer-logarithms kind-rational leb128-binary scientific
   ];
   testHaskellDepends = [
     aeson base binary hedgehog scientific tasty tasty-hedgehog

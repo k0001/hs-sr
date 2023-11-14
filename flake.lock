@@ -70,11 +70,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1695232769,
-        "narHash": "sha256-M1STvCBsYf52ksreq6DH3p8kCyE/Q29AoWLKVCtB3gA=",
+        "lastModified": 1699980439,
+        "narHash": "sha256-wjuu1wwxwdO+M5B8x4NJt4pUcHhik04ltHVuK1PY1fs=",
         "owner": "k0001",
         "repo": "leb128-binary",
-        "rev": "cac5ece494a1d39f8a964f72135b95d1c0609e0d",
+        "rev": "af0fe6e3dd56d8e57313f2a43403a98c788cc8aa",
         "type": "gitlab"
       },
       "original": {
