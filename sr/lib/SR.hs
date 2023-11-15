@@ -35,10 +35,13 @@ module SR
    , KR.Round (..)
    ) where
 
+import Control.Applicative
 import Control.DeepSeq (NFData (..))
+import Control.Monad
 import Data.Aeson qualified as Ae
 import Data.Aeson.Types qualified as Ae
 import Data.Attoparsec.Text qualified as AT
+import Data.Bifunctor
 import Data.Binary qualified as Bin
 import Data.Binary.Get qualified as Bin
 import Data.Binary.SLEB128 qualified as SLEB128
@@ -47,7 +50,7 @@ import Data.Hashable
 import Data.Proxy
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as S
-import GHC.Real (divZeroError)
+import GHC.Real (Ratio (..), divZeroError, (%))
 import GHC.Records (HasField (..))
 import GHC.Stack (HasCallStack)
 import KindRational qualified as KR
@@ -121,10 +124,13 @@ unsafeFromScientific = either error id . fromScientificEither
 --    'fromRationalEither' ('toRational' sr)  ==  'Right' sr
 -- @
 fromRationalEither :: Rational -> Either String SR
-fromRationalEither = \a ->
-   if KR.isTerminating a
-      then Right (SR (S.unsafeFromRational a) a)
-      else Left "Non-terminating Rational"
+fromRationalEither = \a@(_ :% d) ->
+   if d /= 0
+      then
+         if KR.isTerminating a
+            then Right (SR (S.unsafeFromRational a) a)
+            else Left "Non-terminating Rational"
+      else Left "Denominator is zero"
 {-# INLINEABLE fromRationalEither #-}
 
 -- | Fails with 'fail' if 'Rational' is not terminating.
@@ -397,16 +403,48 @@ instance Ae.ToJSON SR where
    toJSON = Ae.toJSON . toScientific
    {-# INLINE toJSON #-}
 
--- | Can decode a 'Ae.Number' or a 'Ae.String' containing an 'AT.scientific'.
+-- | Can decode a 'Ae.Number' or a 'Ae.String' containing
+-- a 'Data.Attoparsec.scientific'.
 instance Ae.FromJSON SR where
-   parseJSON v = Ae.prependFailure "SR: " do
+   parseJSON = \v -> Ae.prependFailure "SR: " do
       case v of
          Ae.Number s -> fromScientific s
-         Ae.String t ->
-            case AT.parseOnly (AT.scientific <* AT.endOfInput) t of
-               Right s -> fromScientific s
-               Left e -> fail e
-         _ -> fail "Expected number or text"
+         Ae.String t -> case AT.parseOnly atp t of
+            Right (Right x) -> pure x
+            Right (Left e) -> fail e
+            _ -> fail msg
+         _ -> fail msg
+     where
+      msg :: String
+      msg =
+         "Expected number in scientific notation, \
+         \text containing a number in scientific notation, \
+         \or text containing `[+-]numerator/denominator`"
+      atp :: AT.Parser (Either String SR)
+      atp =
+         mplus
+            (atpScientific <* AT.endOfInput)
+            (atpRational <* AT.endOfInput)
+      atpScientific :: AT.Parser (Either String SR)
+      atpScientific = do
+         s <- AT.scientific
+         pure $ case fromScientificEither s of
+            Right x -> Right x
+            Left e -> Left ("Scientific: " <> e)
+      atpRational :: AT.Parser (Either String SR)
+      atpRational = do
+         let largeInteger = 10 ^ (100_000 :: Int) :: Integer
+         n :: Integer <- AT.signed AT.decimal
+         _ <- AT.char '/'
+         d :: Integer <- toInteger @Integer <$> AT.decimal
+         pure $
+            first (mappend "Rational: ") $
+               if
+                  | d == 0 -> Left "Denominator is zero"
+                  | n == 0 -> Right 0
+                  | abs n > largeInteger -> Left "Numerator too large"
+                  | d > largeInteger -> Left "Denominator too large"
+                  | otherwise -> fromRationalEither (n % d)
 
 -- | Very compact representation using 'Data.Binary.ULEB128' and
 -- 'Data.Binary.SLEB128' codecs. @0@ is represented with a single

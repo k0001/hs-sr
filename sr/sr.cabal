@@ -29,6 +29,7 @@ common basic
     DataKinds
     DerivingStrategies
     LambdaCase
+    MultiWayIf
     OverloadedRecordDot
     OverloadedStrings
 

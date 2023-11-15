@@ -1,3 +1,5 @@
+{-# OPTIONS_HADDOCK hide #-}
+
 module SR.Test
    ( hgen_Fixed_Default
    , hgen_Rational
@@ -20,9 +22,9 @@ import Data.Aeson qualified as Ae
 import Data.Binary as Bin
 import Data.Fixed
 import Data.Foldable
-import Data.Ratio
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as S
+import GHC.Real
 import Hedgehog ((/==), (===))
 import Hedgehog qualified as H
 import Hedgehog.Gen qualified as HG
@@ -93,6 +95,17 @@ hprop_SR_Aeson_roundtrip = H.property do
    a <- H.forAll hgen_SR_Default
    H.tripping a Ae.encode Ae.decode
    H.tripping a (Ae.encode . show) Ae.decode
+   H.tripping
+      a
+      ( \b ->
+         Ae.encode $
+            concat
+               [ show (numerator b.r)
+               , "/"
+               , show (denominator b.r)
+               ]
+      )
+      Ae.decode
 
 hprop_SR_s :: H.Property
 hprop_SR_s = H.property do
@@ -113,7 +126,7 @@ hprop_SR_s = H.property do
 
 hprop_SR_r :: H.Property
 hprop_SR_r = H.property do
-   a <- H.forAll hgen_Rational_Default
+   a@(n :% d) <- H.forAll hgen_Rational_Default
    rnd <- H.forAll HG.enumBounded
    case SR.fromRational a of
       Just b -> do
@@ -133,7 +146,9 @@ hprop_SR_r = H.property do
          roundFromRational @E0 rnd a === (b, 0)
          roundFromRational @E1 rnd a === (b, 0)
          roundFromRational @E9 rnd a === (b, 0)
+         Just b === Ae.decode @SR (Ae.encode (show n <> "/" <> show d))
       Nothing -> do
+         Nothing === Ae.decode @SR (Ae.encode (show n <> "/" <> show d))
          case roundFromRational @E0 rnd a of
             (sr, rest) -> do
                rest /== 0
