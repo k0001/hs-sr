@@ -23,14 +23,13 @@ import Data.Foldable
 import Data.Ratio
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as S
-import Hedgehog ((===))
+import Hedgehog ((/==), (===))
 import Hedgehog qualified as H
 import Hedgehog.Gen qualified as HG
 import Hedgehog.Range qualified as HR
 import SR
 import Text.Read
-import Prelude hiding (toInteger)
-import Prelude qualified as P
+import Prelude as P
 
 --------------------------------------------------------------------------------
 
@@ -115,33 +114,51 @@ hprop_SR_s = H.property do
 hprop_SR_r :: H.Property
 hprop_SR_r = H.property do
    a <- H.forAll hgen_Rational_Default
-   for_ (SR.fromRational @Maybe a) \b -> do
-      b.r === a
-      b.s === realToFrac a
-      b.s === toScientific b
-      toRational b.s === a
-      toRational b === a
-      realToFrac b === a
-      fromScientificEither b.s === Right b
-      fromRationalEither b.r === Right b
-      fromScientific b.s === Just b
-      SR.fromRational b.r === Just b
-      P.fromRational b.r === a
-      unsafeFromRational b.r === b
-      unsafeFromScientific b.s === b
+   rnd <- H.forAll HG.enumBounded
+   case SR.fromRational a of
+      Just b -> do
+         b.r === a
+         b.s === realToFrac a
+         b.s === toScientific b
+         toRational b.s === a
+         toRational b === a
+         realToFrac b === a
+         fromScientificEither b.s === Right b
+         fromRationalEither b.r === Right b
+         fromScientific b.s === Just b
+         SR.fromRational b.r === Just b
+         P.fromRational b.r === a
+         unsafeFromRational b.r === b
+         unsafeFromScientific b.s === b
+         roundFromRational @E0 rnd a === (b, 0)
+         roundFromRational @E1 rnd a === (b, 0)
+         roundFromRational @E9 rnd a === (b, 0)
+      Nothing -> do
+         case roundFromRational @E0 rnd a of
+            (sr, rest) -> do
+               rest /== 0
+               toRational sr + rest === a
+         case roundFromRational @E1 rnd a of
+            (sr, rest) -> do
+               rest /== 0
+               toRational sr + rest === a
+         case roundFromRational @E9 rnd a of
+            (sr, rest) -> do
+               rest /== 0
+               toRational sr + rest === a
 
 hprop_SR_f :: H.Property
 hprop_SR_f = H.property do
    rnd <- H.forAll HG.enumBounded
    do
       f <- H.forAll (hgen_Fixed_Default @E0)
-      toFixed rnd (fromFixed f) === (f, 0)
+      roundToFixed rnd (fromFixed f) === (f, 0)
    do
       f <- H.forAll (hgen_Fixed_Default @E1)
-      toFixed rnd (fromFixed f) === (f, 0)
+      roundToFixed rnd (fromFixed f) === (f, 0)
    do
-      f <- H.forAll (hgen_Fixed_Default @E12)
-      toFixed rnd (fromFixed f) === (f, 0)
+      f <- H.forAll (hgen_Fixed_Default @E9)
+      roundToFixed rnd (fromFixed f) === (f, 0)
 
 hprop_SR_i :: H.Property
 hprop_SR_i = H.property do
@@ -153,7 +170,7 @@ hprop_SR_i = H.property do
                0
                (negate (10 ^ (99 :: Int)))
                (10 ^ (99 :: Int) - 1)
-   SR.toInteger rnd (fromInteger i) === (i, 0)
+   roundToInteger rnd (fromInteger i) === (i, 0)
 
 hprop_SR_ops1 :: H.Property
 hprop_SR_ops1 = H.property do
@@ -196,11 +213,11 @@ hprop_SR_ops1 = H.property do
       b.r === P.recip a.r
 
    rnd <- H.forAll HG.enumBounded
-   case toFixed @E0 rnd a of
+   case roundToFixed @E0 rnd a of
       (f, rest) -> a === fromFixed f + rest
-   case toFixed @E1 rnd a of
+   case roundToFixed @E1 rnd a of
       (f, rest) -> a === fromFixed f + rest
-   case toFixed @E12 rnd a of
+   case roundToFixed @E9 rnd a of
       (f, rest) -> a === fromFixed f + rest
 
 hprop_SR_ops2 :: H.Property

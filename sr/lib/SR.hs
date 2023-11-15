@@ -1,3 +1,5 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 -- | This module exports the 'SR' type and tools for working with it.
 --
 -- Intended import usage:
@@ -16,6 +18,7 @@ module SR
    , fromRationalEither
    , fromRational
    , unsafeFromRational
+   , roundFromRational
    , fromFixed
    , divEither
    , div
@@ -25,10 +28,10 @@ module SR
     -- * Elimination
     -- $elimination
    , toScientific
+   , roundToInteger
+   , roundToFixed
 
-    -- ** Rounding
-   , toInteger
-   , toFixed
+    -- * Round
    , KR.Round (..)
    ) where
 
@@ -50,7 +53,7 @@ import GHC.Stack (HasCallStack)
 import KindRational qualified as KR
 import Math.NumberTheory.Logarithms (integerLog10)
 import Text.Read (readPrec)
-import Prelude hiding (div, fromRational, recip, toInteger)
+import Prelude hiding (div, fromRational, recip)
 import Prelude qualified as P
 
 --------------------------------------------------------------------------------
@@ -59,12 +62,12 @@ import Prelude qualified as P
 --
 -- @
 -- 'getField' \@\"s\" :: 'SR' -> 'Scientific'  /-- i.e., __sr.s__/
--- 'toScientific'  :: 'SR' -> 'Scientific'
+-- 'toScientific' :: 'SR' -> 'Scientific'
 -- 'getField' \@\"r\" :: 'SR' -> 'Rational'    /-- i.e., __sr.r__/
--- 'toRational'    :: 'SR' -> 'Rational'
--- 'toInteger'     :: 'KR.Round' -> 'SR' -> ('Integer', 'SR')
--- 'toFixed'       :: 'HasResolution' r => 'KR.Round' -> 'SR' -> ('Fixed' r, 'SR')
--- 'realToFrac'    :: 'Fractional' a => 'SR' -> a
+-- 'toRational' :: 'SR' -> 'Rational'
+-- 'roundToInteger' :: 'KR.Round' -> 'SR' -> ('Integer', 'SR')
+-- 'roundToFixed' :: 'HasResolution' r => 'KR.Round' -> 'SR' -> ('Fixed' r, 'SR')
+-- 'realToFrac' :: 'Fractional' a => 'SR' -> a
 -- @
 
 --------------------------------------------------------------------------------
@@ -145,12 +148,35 @@ unsafeFromRational :: (HasCallStack) => Rational -> SR
 unsafeFromRational = either error id . fromRationalEither
 {-# INLINE unsafeFromRational #-}
 
+-- | 'KR.Round' a 'Rational' into a 'SR'. Returns the 'Rational' reminder, too.
+--
+-- @
+-- forall (rnd :: 'KR.Round') r (rat :: 'Rational').
+--    ('HasResolution' r) =>
+--        case 'roundFromRational' @r rnd rat
+--           (sr, 0) -> 'fromRational' rat  ==  'Just' sr
+--           _       -> 'fromRational' rat  ==  'Nothing'
+-- @
+--
+-- @
+-- forall (rnd :: 'KR.Round') r (rat :: 'Rational').
+--    ('HasResolution' r) =>
+--        case 'roundFromRational' @r rnd rat of
+--           (sr, rest) -> 'toRational' sr + rest == rat
+-- @
+roundFromRational
+   :: forall r. (HasResolution r) => KR.Round -> Rational -> (SR, Rational)
+roundFromRational rnd = \a ->
+   case roundRealFracToFixed @r rnd a of
+      (f, r) -> (fromFixed f, r)
+{-# INLINE roundFromRational #-}
+
 -- | 'realToFrac', specialized to 'Fixed'. Probably a bit faster.
 --
 -- @
 -- forall (rnd :: 'KR.Round') r (f :: 'Fixed' r).
 --    ('HasResolution' r) =>
---        'toFixed' rnd ('fromFixed' f)  ==  (f, 0)
+--        'roundToFixed' rnd ('fromFixed' f)  ==  (f, 0)
 -- @
 --
 -- @
@@ -170,23 +196,23 @@ fixedToScientific = \(MkFixed i) -> S.scientific i e
 {-# INLINE fixedToScientific #-}
 
 -- | 'KR.Round' a 'SR' so that it fits into the 'Fixed'. Returns the
--- remainder.
+-- remainder, too.
 --
 -- @
 -- forall (rnd :: 'KR.Round') r (f :: 'Fixed' r).
 --    ('HasResolution' r) =>
---        'toFixed' rnd ('fromFixed' f)  ==  (f, 0)
+--        'roundToFixed' rnd ('fromFixed' f)  ==  (f, 0)
 -- @
 --
 -- @
 -- forall (rnd :: 'KR.Round') r (sr :: 'SR').
 --    ('HasResolution' r) =>
---        case 'toFixed' @r rnd sr of
+--        case 'roundToFixed' @r rnd sr of
 --           (f, rest) -> 'fromFixed' f + rest == sr
 -- @
-toFixed :: (HasResolution r) => KR.Round -> SR -> (Fixed r, SR)
-toFixed rnd = roundRealFracToFixed rnd
-{-# INLINE toFixed #-}
+roundToFixed :: (HasResolution r) => KR.Round -> SR -> (Fixed r, SR)
+roundToFixed rnd = roundRealFracToFixed rnd
+{-# INLINE roundToFixed #-}
 
 roundRealFracToFixed
    :: forall r a b
@@ -203,23 +229,23 @@ roundRealFracToFixed rnd = \a ->
 {-# INLINE roundRealFracToFixed #-}
 
 -- | 'KR.Round' a 'SR' so that it fits into an 'Integer'. Returns the
--- remainder.
+-- remainder, too.
 --
 -- @
 -- forall (rnd :: 'KR.Round') (i :: 'Integer').
---    'toInteger' rnd ('fromInteger' i)  ==  (i, 0)
+--    'roundToInteger' rnd ('fromInteger' i)  ==  (i, 0)
 -- @
 --
 -- @
 -- forall (rnd :: 'KR.Round') (sr :: 'SR').
---    case 'toInteger' rnd sr of
+--    case 'roundToInteger' rnd sr of
 --       (i, rest) -> 'fromInteger' i + rest == sr
 -- @
-toInteger :: KR.Round -> SR -> (Integer, SR)
-toInteger rnd = \a ->
+roundToInteger :: KR.Round -> SR -> (Integer, SR)
+roundToInteger rnd = \a ->
    case KR.divRem rnd a.r of
       (i, rest) -> (i, unsafeFromRational rest)
-{-# INLINE toInteger #-}
+{-# INLINE roundToInteger #-}
 
 -- | @
 -- forall (sr :: 'SR').
@@ -348,7 +374,7 @@ recip :: (MonadFail m) => SR -> m SR
 recip = either fail pure . recipEither
 {-# INLINE recip #-}
 
--- | See 'toInteger' and 'toFixed' for more general rounding tools.
+-- | See 'roundToInteger' and 'roundToFixed' for more general rounding tools.
 instance RealFrac SR where
    properFraction = \a ->
       let (i, br) = properFraction $! a.r
