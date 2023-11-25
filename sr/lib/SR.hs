@@ -33,10 +33,14 @@ module SR
 
     -- * Round
    , KR.Round (..)
+
+    -- * Errors
+   , Err (..)
    ) where
 
 import Control.Applicative
 import Control.DeepSeq (NFData (..))
+import Control.Exception (Exception, displayException)
 import Control.Monad
 import Data.Aeson qualified as Ae
 import Data.Aeson.Types qualified as Ae
@@ -75,6 +79,28 @@ import Prelude qualified as P
 
 --------------------------------------------------------------------------------
 
+data Err
+   = Err_DenominatorIsZero
+   | Err_DenominatorTooLarge
+   | Err_DivisionByZero
+   | Err_NotTerminating
+   | Err_NumeratorTooLarge
+   | Err_ScientificTooLarge
+   | Err_ScientificTooSmall
+   deriving stock (Eq, Ord, Show)
+
+instance Exception Err where
+   displayException = \case
+      Err_DenominatorIsZero -> "Rational denominator is zero"
+      Err_DenominatorTooLarge -> "Denominator too large"
+      Err_DivisionByZero -> "Division by zero"
+      Err_NotTerminating -> "Rational not terminating"
+      Err_NumeratorTooLarge -> "Numerator too large"
+      Err_ScientificTooLarge -> "Scientific too large"
+      Err_ScientificTooSmall -> "Scientific too small"
+
+--------------------------------------------------------------------------------
+
 -- | A wrapper around a number that can be represented as both a 'Scientific'
 -- and a 'Rational', implying that the number is not too big or small so as to
 -- exhaust resources when being treated as 'Rational', and that it can be
@@ -82,76 +108,78 @@ import Prelude qualified as P
 -- That is, it doesn't lead to repeating decimals.
 data SR = SR Scientific Rational
 
--- | Fails with 'Left' if 'Scientific' doesn't safely fit in 'Rational'.
+-- | May fail with 'Err_ScientiricTooSmall' or 'Err_ScientificTooLarge'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'fromScientificEither' ('toScientific' sr)  ==  'Right' sr
 -- @
-fromScientificEither :: Scientific -> Either String SR
+fromScientificEither :: Scientific -> Either Err SR
 fromScientificEither = \a -> case S.toBoundedRealFloat a of
-   Right (_ :: Double) -> Right (SR a (toRational a))
+   Right (_ :: Double) -> Right $ SR a (toRational a)
    Left b
-      | b == 0 -> Left "Scientific too small for Rational"
-      | otherwise -> Left "Scientific too large for Rational"
+      | b == 0 -> Left Err_ScientificTooSmall
+      | otherwise -> Left Err_ScientificTooLarge
 {-# INLINEABLE fromScientificEither #-}
 
--- | Fails with 'fail' if 'Scientific' doesn't safely fit in 'Rational'.
+-- | Like 'fromScientificEither', but fails with 'fail'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'fromScientific' ('toScientific' sr)  ==  'pure' sr
 -- @
 fromScientific :: (MonadFail m) => Scientific -> m SR
-fromScientific = either fail pure . fromScientificEither
+fromScientific =
+   either (fail . displayException) pure . fromScientificEither
 {-# INLINE fromScientific #-}
 
--- | Fails with 'error' if 'Scientific' doesn't safely fit in 'Rational'.
--- Prefer to use "SR".'fromScientific'.
+-- | Like 'fromScientificEither', but fails with 'error'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'unsafeFromScientific' ('toScientific' sr)  ==  sr
 -- @
 unsafeFromScientific :: (HasCallStack) => Scientific -> SR
-unsafeFromScientific = either error id . fromScientificEither
+unsafeFromScientific =
+   either (error . displayException) id . fromScientificEither
 {-# INLINE unsafeFromScientific #-}
 
--- | Fails with 'Left' if 'Rational' is not terminating.
+-- | May fail with 'Err_NotTerminating' or 'Err_DenominatorIsZero'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'fromRationalEither' ('toRational' sr)  ==  'Right' sr
 -- @
-fromRationalEither :: Rational -> Either String SR
+fromRationalEither :: Rational -> Either Err SR
 fromRationalEither = \a@(_ :% d) ->
    if d /= 0
       then
          if KR.isTerminating a
-            then Right (SR (S.unsafeFromRational a) a)
-            else Left "Non-terminating Rational"
-      else Left "Denominator is zero"
+            then Right $ SR (S.unsafeFromRational a) a
+            else Left Err_NotTerminating
+      else Left Err_DenominatorIsZero
 {-# INLINEABLE fromRationalEither #-}
 
--- | Fails with 'fail' if 'Rational' is not terminating.
+-- | Like 'fromRationalEither', but fails with 'fail'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'fromRational' ('toRational' sr)  ==  'pure' sr
 -- @
 fromRational :: (MonadFail m) => Rational -> m SR
-fromRational = either fail pure . fromRationalEither
+fromRational =
+   either (fail . displayException) pure . fromRationalEither
 {-# INLINE fromRational #-}
 
--- | Fails with 'error' if the 'Rational' is not terminating. Prefer
--- to use "SR".'fromRational'.
+-- | Like 'fromRationalEither', but fails with 'error'.
 --
 -- @
 -- forall (sr :: 'SR').
 --    'unsafeFromRational' ('toRational' sr)  ==  sr
 -- @
 unsafeFromRational :: (HasCallStack) => Rational -> SR
-unsafeFromRational = either error id . fromRationalEither
+unsafeFromRational =
+   either (error . displayException) id . fromRationalEither
 {-# INLINE unsafeFromRational #-}
 
 -- | 'KR.Round' a 'Rational' into a 'SR'. Returns the 'Rational' reminder, too.
@@ -353,31 +381,31 @@ instance Fractional SR where
    {-# INLINE fromRational #-}
 
 -- | Safe version of "Prelude".'/'. Fails with 'Left' if divisor is 0.
-divEither :: SR -> SR -> Either String SR
+divEither :: SR -> SR -> Either Err SR
 divEither a b =
    if b.r /= 0
       then fromRationalEither (a.r / b.r)
-      else Left "Division by zero"
+      else Left Err_DivisionByZero
 {-# INLINE divEither #-}
 
 -- | Safe version of "Prelude".'/'. Fails with 'fail' if divisor is 0.
 div :: (MonadFail m) => SR -> SR -> m SR
-div a b = either fail pure (divEither a b)
+div a b = either (fail . displayException) pure (divEither a b)
 {-# INLINE div #-}
 
 -- | Safe version of "Prelude".'recip'. Fails with 'Left' if 0, or if
 -- reciprocal would be non-terminating.
-recipEither :: SR -> Either String SR
+recipEither :: SR -> Either Err SR
 recipEither = \a ->
    if a.r /= 0
       then fromRationalEither (P.recip a.r)
-      else Left "Division by zero"
+      else Left Err_DivisionByZero
 {-# INLINE recipEither #-}
 
 -- | Safe version of "Prelude".'recip'. Fails with 'fail' if 0, or if
 -- reciprocal would be non-terminating.
 recip :: (MonadFail m) => SR -> m SR
-recip = either fail pure . recipEither
+recip = either (fail . displayException) pure . recipEither
 {-# INLINE recip #-}
 
 -- | See 'roundToInteger' and 'roundToFixed' for more general rounding tools.
@@ -430,7 +458,7 @@ instance Ae.FromJSON SR where
          s <- AT.scientific
          pure $ case fromScientificEither s of
             Right x -> Right x
-            Left e -> Left ("Scientific: " <> e)
+            Left e -> Left ("Scientific: " <> displayException e)
       atpRational :: AT.Parser (Either String SR)
       atpRational = do
          let largeInteger = 10 ^ (100_000 :: Int) :: Integer
@@ -438,12 +466,12 @@ instance Ae.FromJSON SR where
          _ <- AT.char '/'
          d :: Integer <- toInteger @Integer <$> AT.decimal
          pure $
-            first (mappend "Rational: ") $
+            first (mappend "Rational: " . displayException) $
                if
-                  | d == 0 -> Left "Denominator is zero"
+                  | d == 0 -> Left Err_DenominatorIsZero
                   | n == 0 -> Right 0
-                  | abs n > largeInteger -> Left "Numerator too large"
-                  | d > largeInteger -> Left "Denominator too large"
+                  | abs n > largeInteger -> Left Err_NumeratorTooLarge
+                  | d > largeInteger -> Left Err_DenominatorTooLarge
                   | otherwise -> fromRationalEither (n % d)
 
 -- | Very compact representation using 'Data.Binary.ULEB128' and
