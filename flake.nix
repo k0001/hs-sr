@@ -18,7 +18,7 @@
     inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       flake.overlays.default = inputs.nixpkgs.lib.composeManyExtensions [
         inputs.hs_kind.overlays.default
-        #inputs.hs_leb128-binary.overlays.default
+        inputs.hs_leb128-binary.overlays.default
         (final: prev: {
           haskell = prev.haskell // {
             packageOverrides = prev.lib.composeExtensions
