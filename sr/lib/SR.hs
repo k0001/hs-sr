@@ -91,7 +91,7 @@ data Err
 
 instance Exception Err where
    displayException = \case
-      Err_DenominatorIsZero -> "Rational denominator is zero"
+      Err_DenominatorIsZero -> "Denominator is zero"
       Err_DenominatorTooLarge -> "Denominator too large"
       Err_DivisionByZero -> "Division by zero"
       Err_NotTerminating -> "Rational not terminating"
