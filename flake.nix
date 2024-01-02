@@ -10,8 +10,7 @@
     hs_kind.inputs.flakety.follows = "flakety";
 
     hs_leb128-binary.url = "gitlab:k0001/leb128-binary";
-    hs_leb128-binary.inputs.nixpkgs.follows = "nixpkgs";
-    hs_leb128-binary.inputs.flake-parts.follows = "flake-parts";
+    hs_leb128-binary.inputs.flakety.follows = "flakety";
   };
 
   outputs = inputs@{ ... }:
@@ -53,7 +52,7 @@
           mkShellFor = ghc:
             ghc.shellFor {
               packages = p: [ p.sr ];
-              withHoogle = false;
+              withHoogle = true;
               nativeBuildInputs =
                 [ pkgs.cabal-install pkgs.cabal2nix pkgs.ghcid ];
             };
