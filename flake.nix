@@ -17,6 +17,7 @@
   outputs = inputs@{ ... }:
     inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       flake.overlays.default = inputs.nixpkgs.lib.composeManyExtensions [
+        inputs.flakety.overlays.default
         inputs.hs_kind.overlays.default
         inputs.hs_leb128-binary.overlays.default
         (final: prev: {
