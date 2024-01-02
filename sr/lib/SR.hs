@@ -333,11 +333,11 @@ instance Read SR where
    readPrec = fromScientific =<< readPrec
 
 instance Eq SR where
-   a == b = a.s == b.s
+   a == b = a.r == b.r
    {-# INLINE (==) #-}
 
 instance Ord SR where
-   compare a b = compare a.s b.s
+   compare a b = compare a.r b.r
    {-# INLINE compare #-}
 
 instance Num SR where
