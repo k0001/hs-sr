@@ -155,10 +155,15 @@ fromRationalEither = \a@(_ :% d) ->
    if d /= 0
       then
          if KR.isTerminating a
-            then Right $ SR (S.unsafeFromRational a) a
+            then Right $ unsafestFromRational a
             else Left Err_NotTerminating
       else Left Err_DenominatorIsZero
 {-# INLINEABLE fromRationalEither #-}
+
+-- | Internal.
+unsafestFromRational :: Rational -> SR
+unsafestFromRational r = SR (S.unsafeFromRational r) r
+{-# INLINEABLE unsafestFromRational #-}
 
 -- | Like 'fromRationalEither', but fails with 'fail'.
 --
@@ -341,19 +346,19 @@ instance Ord SR where
    {-# INLINE compare #-}
 
 instance Num SR where
-   SR !as !ar + SR !bs !br = SR (as + bs) (ar + br)
+   SR _ !ar + SR _ !br = unsafestFromRational (ar + br)
    {-# INLINE (+) #-}
-   SR !as !ar - SR !bs !br = SR (as - bs) (ar - br)
+   SR _ !ar - SR _ !br = unsafestFromRational (ar - br)
    {-# INLINE (-) #-}
-   SR !as !ar * SR !bs !br = SR (as * bs) (ar * br)
+   SR _ !ar * SR _ !br = unsafestFromRational (ar * br)
    {-# INLINE (*) #-}
-   negate = \(SR !as !ar) -> SR (negate as) (negate ar)
+   negate = \(SR _ !ar) -> unsafestFromRational (negate ar)
    {-# INLINE negate #-}
-   abs = \(SR !as !ar) -> SR (abs as) (abs ar)
+   abs = \(SR _ !ar) -> unsafestFromRational (abs ar)
    {-# INLINE abs #-}
-   signum = \(SR !as !ar) -> SR (signum as) (signum ar)
+   signum = \(SR _ !ar) -> unsafestFromRational (signum ar)
    {-# INLINE signum #-}
-   fromInteger = \i -> SR (fromInteger i) (fromInteger i)
+   fromInteger = \i -> unsafestFromRational (fromInteger i)
    {-# INLINE fromInteger #-}
 
 -- | @
@@ -410,10 +415,10 @@ recip = either (fail . displayException) pure . recipEither
 
 -- | See 'roundToInteger' and 'roundToFixed' for more general rounding tools.
 instance RealFrac SR where
-   properFraction = \a ->
-      let (i, br) = properFraction $! a.r
-      in  -- `ar` is known to be terminating, so `br` is too.
-          (i, SR (S.unsafeFromRational br) br)
+   properFraction = \(SR _ !ar) ->
+      -- `ar` is known to be terminating, so `br` is too.
+      let (i, br) = properFraction ar
+      in  (i, unsafestFromRational br)
    {-# INLINE properFraction #-}
 
 instance NFData SR where
